@@ -91,11 +91,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pipe.debug = True
         render_pkg = render(viewpoint_cam, gaussians, pipe, background, opt)
         image, language_feature, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["language_feature_image"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-        
+
+        ## crop image to match orignal DINO crop:
+
+        ##will fix hard coded parameters later
+        height = 728
+        width = 980
+        transform = transforms.Compose([       
+            transforms.CenterCrop(size=(height, width)),
+
+        ])
+
+        cropped_language_feature = transform(language_feature)
+
         # Loss
         if opt.include_feature:
-            gt_language_feature, language_feature_mask = viewpoint_cam.get_language_feature(language_feature_dir=dataset.lf_path, feature_level=dataset.feature_level)
-            Ll1 = l1_loss(language_feature*language_feature_mask, gt_language_feature*language_feature_mask)            
+            gt_language_feature = viewpoint_cam.get_language_feature(language_feature_dir=dataset.lf_path, feature_level=dataset.feature_level)
+            Ll1 = l1_loss(language_feature, cropped_language_feature)            
             loss = Ll1
         else:
             gt_image = viewpoint_cam.original_image.cuda()
