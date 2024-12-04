@@ -44,7 +44,7 @@ def render_set(model_path, source_path, name, iteration, views, gaussians, pipel
             gt = view.original_image[0:3, :, :]
             
         else:
-            gt, mask = view.get_language_feature(os.path.join(source_path, args.language_features_name), feature_level=args.feature_level)
+            gt = view.get_language_feature(os.path.join(source_path, args.language_features_name), feature_level=args.feature_level)
 
         np.save(os.path.join(render_npy_path, '{0:05d}'.format(idx) + ".npy"),rendering.permute(1,2,0).cpu().numpy())
         np.save(os.path.join(gts_npy_path, '{0:05d}'.format(idx) + ".npy"),gt.permute(1,2,0).cpu().numpy())
