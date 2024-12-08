@@ -14,6 +14,10 @@ from copy import deepcopy
 import torch
 import torchvision
 from torch import nn
+import math
+from transformers import Dinov2Model
+from torchvision import transforms
+
 
 
 def dino_slice(slice, dino_model):
@@ -47,21 +51,14 @@ def dino_slice(slice, dino_model):
     last_hidden_states = outputs.last_hidden_state  # Shape: [batch_size, num_tokens, feature_dim]
     
     patch_features = last_hidden_states[:, 1:, :]  # Exclude the [CLS] token - not relevant for per-pixel info
+
     
-    batch_size, num_patches, feature_dim = patch_features.shape
+    del last_hidden_states
+    del outputs
     
-    patch_features_grid = patch_features.squeeze().reshape(-1, height//14, width//14, feature_dim)
-    
-    # Upsample the feature maps using bicubic interpolation to match the original image size (height x width)
-    upsampled_features = F.interpolate(
-        patch_features_grid.permute(0, 3, 1, 2),  # Permute to [batch_size, feature_dim, height_patches, width_patches]
-        size=(height, width), 
-        mode='bicubic',  # Bicubic interpolation
-        align_corners=False
-    )
-    
-    # The upsampled features tensor now has shape [batch_size, feature_dim, height, width]
-    return upsampled_features
+    torch.cuda.empty_cache()
+
+    return patch_features.squeeze()
 
 def create(image_list, data_list, save_folder):
     assert image_list is not None, "image_list must be provided to generate features"
@@ -73,30 +70,35 @@ def create(image_list, data_list, save_folder):
     
 
     batch_size = 16
-    num_batches = image_list.size(0) // batch_size + 1  # Calculate number of batches
-
-    img_embeds = torch.zeros_like(image_list)
+    num_batches = math.ceil(image_list.size(0) / batch_size) 
 
     for i in tqdm(range(num_batches), desc="Processing batches", leave=True):
-        # Get the current batch (slice the tensor)
         if (i + 1) * batch_size < len(image_list):
             start_index = i * batch_size
             end_index = (i + 1) * batch_size
         else:
             start_index = i * batch_size
-            end_index = -1
+            end_index = len(image_list)
         
         batch_input = image_list[start_index:end_index]
+
         dino_features = dino_slice(batch_input, model)
-        img_embeds[start_index:end_index] = dino_features
+        if end_index - start_index == 1:
+          dino_features = dino_features.unsqueeze(0)
         
-        
-    for i in range(img_embeds.shape[0]):
-        save_path = os.path.join(save_folder, data_list[i].split('.')[0])
-        curr = {
-            'feature': img_embeds[i, :, :, :].reshape(embed_size, height * width).permute(1,0)
-        }
-        sava_numpy(save_path, curr)
+        for j in range(start_index, end_index):
+          save_path = os.path.join(save_folder, data_list[j].split('.')[0])
+          curr = {
+              'feature': dino_features[j-start_index, :, :]
+          }
+          
+          sava_numpy(save_path, curr)
+
+        del dino_features
+        del batch_input
+
+        torch.cuda.empty_cache()
+
 
 def sava_numpy(save_path, data):
     save_path_s = save_path + '_s.npy'
