@@ -14,6 +14,7 @@ import torch
 from torch import nn
 import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
+import torch.nn.functional as F
 
 class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
@@ -64,7 +65,7 @@ class Camera(nn.Module):
         feature_map = torch.from_numpy(np.load(language_feature_name + '_f.npy'))
         
 
-        point_feature = feature_map.reshape(self.cropped_image_height // 14, self.cropped_image_width // 14, 768).permute(2, 0, 1)
+        point_feature = feature_map.reshape(self.cropped_image_height // 14, self.cropped_image_width // 14, -1).permute(2, 0, 1)
         
         upsampled_features = F.interpolate(
             point_feature.unsqueeze(0),
