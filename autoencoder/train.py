@@ -41,7 +41,7 @@ if __name__ == '__main__':
     train_dataset = Autoencoder_dataset(data_dir)
     train_loader = DataLoader(
         dataset=train_dataset,
-        batch_size=64,
+        batch_size=1024,
         shuffle=True,
         num_workers=16,
         drop_last=False
@@ -68,6 +68,7 @@ if __name__ == '__main__':
     best_epoch = 0
     for epoch in tqdm(range(num_epochs)):
         model.train()
+        avg_loss = 0
         for idx, feature in enumerate(train_loader):
             data = feature.to("cuda:0")
             outputs_dim3 = model.encode(data)
@@ -76,18 +77,17 @@ if __name__ == '__main__':
             l2loss = l2_loss(outputs, data) 
             cosloss = cos_loss(outputs, data)
             loss = l2loss + cosloss * 0.001
-            
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            avg_loss += loss.item()
             global_iter = epoch * len(train_loader) + idx
             tb_writer.add_scalar('train_loss/l2_loss', l2loss.item(), global_iter)
             tb_writer.add_scalar('train_loss/cos_loss', cosloss.item(), global_iter)
             tb_writer.add_scalar('train_loss/total_loss', loss.item(), global_iter)
             tb_writer.add_histogram("feat", outputs, global_iter)
-
-        if epoch > 95:
+        print(f"loss is {avg_loss / len(train_loader)}")
+        if epoch > 35:
             eval_loss = 0.0
             model.eval()
             for idx, feature in enumerate(test_loader):
