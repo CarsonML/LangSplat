@@ -59,12 +59,21 @@ class Camera(nn.Module):
         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
         self.camera_center = self.world_view_transform.inverse()[3, :3]
     def get_language_feature(self, language_feature_dir, feature_level):
+
         language_feature_name = os.path.join(language_feature_dir, self.image_name)
         feature_map = torch.from_numpy(np.load(language_feature_name + '_f.npy'))
         
-        point_feature = feature_map.reshape(-1, self.cropped_image_height, self.cropped_image_width)
-       
-        return point_feature.cuda()
+
+        point_feature = feature_map.reshape(self.cropped_image_height // 14, self.cropped_image_width // 14, 768).permute(2, 0, 1)
+        
+        upsampled_features = F.interpolate(
+            point_feature.unsqueeze(0),
+            size=(self.cropped_image_height, self.cropped_image_width), 
+            mode='bicubic',  # Bicubic interpolation
+            align_corners=False
+        )
+
+        return upsampled_features[0].cuda()
 
 class MiniCam:
     def __init__(self, width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform):
