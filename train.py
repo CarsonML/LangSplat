@@ -27,14 +27,16 @@ try:
     TENSORBOARD_FOUND = True
 except ImportError:
     TENSORBOARD_FOUND = False
+
+from torchvision import transforms
     
 
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, feature_degree):
     
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = GaussianModel(dataset.sh_degree)
+    gaussians = GaussianModel(dataset.sh_degree, feature_degree)
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
 
@@ -92,22 +94,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         render_pkg = render(viewpoint_cam, gaussians, pipe, background, opt)
         image, language_feature, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["language_feature_image"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-        ## crop image to match orignal DINO crop:
 
+        ## crop image to match orignal DINO crop:
         ##will fix hard coded parameters later
         height = 728
         width = 980
+
         transform = transforms.Compose([       
             transforms.CenterCrop(size=(height, width)),
 
         ])
-
         cropped_language_feature = transform(language_feature)
 
         # Loss
         if opt.include_feature:
             gt_language_feature = viewpoint_cam.get_language_feature(language_feature_dir=dataset.lf_path, feature_level=dataset.feature_level)
-            Ll1 = l1_loss(language_feature, cropped_language_feature)            
+            Ll1 = l1_loss(cropped_language_feature, gt_language_feature)     
+
             loss = Ll1
         else:
             gt_image = viewpoint_cam.original_image.cuda()
@@ -228,6 +231,7 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--start_checkpoint", type=str, default = None)
+    parser.add_argument("--feature_degree", type=int, default=3)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     print(args)
@@ -240,7 +244,7 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.feature_degree)
 
     # All done
     print("\nTraining complete.")
